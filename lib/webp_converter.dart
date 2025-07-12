@@ -1,4 +1,6 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:path_provider/path_provider.dart';
@@ -34,13 +36,15 @@ class WebpConverter {
       if (result.exitCode == 0) {
         return tempOutputPath;
       } else {
-        return '''cwebp 실행 실패:
+        debugPrint('''cwebp 실행 실패:
                   result.stderr: ${result.stderr}
                   result.stdout: ${result.stdout}
-               ''';
+               ''');
+        return null;
       }
     } catch (e) {
-      return '변환 중 오류 발생: $e';
+      debugPrint('변환 중 오류 발생: $e');
+      return null;
     }
   }
 }
