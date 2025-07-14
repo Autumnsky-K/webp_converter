@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:webp_converter/webp_converter.dart';
 import 'package:path/path.dart' as p;
@@ -15,12 +15,13 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return const CupertinoApp(
       title: 'WebP Converter',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      theme: CupertinoThemeData(
+        brightness: Brightness.light,
+        primaryColor: CupertinoColors.systemPurple,
       ),
-      home: const HomePage(title: 'Flutter WebP Converter'),
+      home: HomePage(title: 'WebP Converter'),
     );
   }
 }
@@ -36,10 +37,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String? _selectedFilePath;
   String _status = '이미지를 선택해주세요';
+  bool _isConverting = false;
 
   void _pickImage() async {
     try {
-      final FilePickerResult? result = await FilePicker.platform.pickFiles();
+      final FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+      );
       if (result != null && result.files.single.path != null) {
         setState(() {
           _selectedFilePath = result.files.single.path!;
@@ -62,6 +66,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     setState(() {
+      _isConverting = true;
       _status = '변환 중...';
     });
 
@@ -104,59 +109,99 @@ class _HomePageState extends State<HomePage> {
         final File tempFile = File(tempWebPPath);
         if (await tempFile.exists()) {
           await tempFile.delete();
-          _selectedFilePath = null;
         }
       }
+      setState(() {
+        _isConverting = false;
+        _selectedFilePath = null;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            if (_selectedFilePath != null)
-              Expanded(
-                child: Column(
-                  children: [
-                    Text(
-                      p.basename(_selectedFilePath!),
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(middle: Text(widget.title)),
+      child: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              if (_selectedFilePath != null)
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '선택된 이미지',
+                          style: CupertinoTheme.of(
+                            context,
+                          ).textTheme.navTitleTextStyle,
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12.0),
+                            child: Image.file(
+                              File(_selectedFilePath!),
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          p.basename(_selectedFilePath!),
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
+                  ),
+                )
+              else
+                const Spacer(),
+              if (_isConverting)
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CupertinoActivityIndicator(radius: 20),
+                ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Text(
+                  _status,
+                  textAlign: TextAlign.center,
+                  style: CupertinoTheme.of(context).textTheme.textStyle
+                      .copyWith(color: CupertinoColors.secondaryLabel),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Row(
+                  children: [
                     Expanded(
-                      child: Image.file(
-                        File(_selectedFilePath!),
-                        fit: BoxFit.contain,
+                      child: CupertinoButton(
+                        onPressed: _isConverting ? null : _pickImage,
+                        child: const Text('이미지 선택'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: CupertinoButton.filled(
+                        onPressed: _selectedFilePath != null && !_isConverting
+                            ? _convertImage
+                            : null,
+                        child: const Text('WebP로 변환'),
                       ),
                     ),
                   ],
                 ),
               ),
-            Text(_status),
-            TextButton(
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.white,
-                textStyle: const TextStyle(color: Colors.black, fontSize: 16),
-              ),
-              onPressed: _pickImage,
-              child: const Text('이미지 선택'),
-            ),
-            TextButton(
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.white,
-                textStyle: const TextStyle(color: Colors.black, fontSize: 16),
-              ),
-              onPressed: (_selectedFilePath != null) ? _convertImage : null,
-              child: const Text('WebP로 변환'),
-            ),
-          ],
+              const SizedBox(height: 48),
+            ],
+          ),
         ),
       ),
     );
