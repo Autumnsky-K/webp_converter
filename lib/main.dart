@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/cupertino.dart';
 import 'package:file_picker/file_picker.dart';
@@ -35,19 +34,20 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  String? _selectedFilePath;
+  List<String> _selectedFilePaths = [];
   String _status = '이미지를 선택해주세요';
   bool _isConverting = false;
 
-  void _pickImage() async {
+  void _pickImages() async {
     try {
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.image,
+        allowMultiple: true,
       );
-      if (result != null && result.files.single.path != null) {
+      if (result != null && result.paths.isNotEmpty) {
         setState(() {
-          _selectedFilePath = result.files.single.path!;
-          _status = '선택된 이미지: ${p.basename(_selectedFilePath!)}';
+          _selectedFilePaths = result.paths.map((path) => path!).toList();
+          _status = '${_selectedFilePaths.length} 개의 이미지가 선택되었습니다.';
         });
       }
     } catch (e) {
@@ -57,65 +57,64 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _convertImage() async {
-    if (_selectedFilePath == null) {
+  Future<void> _convertImages() async {
+    if (_selectedFilePaths.isEmpty) {
       setState(() {
         _status = '이미지를 선택해주세요';
       });
       return;
     }
 
-    setState(() {
-      _isConverting = true;
-      _status = '변환 중...';
-    });
+    final String? outputDirectory = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: '변환된 파일을 저장할 폴더를 선택하세요.',
+    );
 
-    String? tempWebPPath;
-    try {
-      tempWebPPath = await WebpConverter.convertToWebP(_selectedFilePath!);
-      if (tempWebPPath == null) {
-        setState(() {
-          _status = '변환 실패';
-        });
-        return;
-      }
-
-      final File tempFile = File(tempWebPPath);
-      final Uint8List fileBytes = await tempFile.readAsBytes();
-      final String suggestedFileName =
-          '${p.basenameWithoutExtension(_selectedFilePath!)}.webp';
-
-      final String? resultPath = await FilePicker.platform.saveFile(
-        dialogTitle: 'WebP 파일을 저장해주세요',
-        fileName: suggestedFileName,
-        bytes: fileBytes,
-      );
-
-      if (resultPath != null) {
-        setState(() {
-          _status = '${p.basename(resultPath)}에 저장 되었습니다.';
-        });
-      } else {
-        setState(() {
-          _status = '저장을 취소했습니다.';
-        });
-      }
-    } catch (e) {
+    if (outputDirectory == null) {
       setState(() {
-        _status = '오류 발생: $e';
+        _status = '폴더 선택이 취소되었습니다.';
       });
-    } finally {
-      if (tempWebPPath != null) {
-        final File tempFile = File(tempWebPPath);
-        if (await tempFile.exists()) {
-          await tempFile.delete();
+      return;
+    }
+
+    int successCount = 0;
+    int totalCount = _selectedFilePaths.length;
+
+    for (int i = 0; i < totalCount; i++) {
+      final String inputPath = _selectedFilePaths[i];
+      setState(() {
+        _status = '변환 중... (${i + 1}/$totalCount)';
+      });
+
+      String? tempWebPPath;
+      try {
+        tempWebPPath = await WebpConverter.convertToWebP(inputPath);
+
+        if (tempWebPPath != null) {
+          final File tempFile = File(tempWebPPath);
+          final String outputFileName =
+              '${p.basenameWithoutExtension(inputPath)}.webp';
+          final String outputPath = p.join(outputDirectory, outputFileName);
+
+          await tempFile.copy(outputPath);
+          successCount++;
+        }
+      } catch (e) {
+        debugPrint('오류 발생: $e');
+      } finally {
+        if (tempWebPPath != null) {
+          final File tempFile = File(tempWebPPath);
+          if (await tempFile.exists()) {
+            await tempFile.delete();
+          }
         }
       }
-      setState(() {
-        _isConverting = false;
-        _selectedFilePath = null;
-      });
     }
+
+    setState(() {
+      _status = '$totalCount개의 이미지 중 $successCount개 변환 완료';
+      _isConverting = false;
+      _selectedFilePaths.clear();
+    });
   }
 
   @override
@@ -123,85 +122,74 @@ class _HomePageState extends State<HomePage> {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(middle: Text(widget.title)),
       child: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              if (_selectedFilePath != null)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '선택된 이미지',
-                          style: CupertinoTheme.of(
-                            context,
-                          ).textTheme.navTitleTextStyle,
-                        ),
-                        const SizedBox(height: 16),
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(12.0),
-                            child: Image.file(
-                              File(_selectedFilePath!),
-                              fit: BoxFit.contain,
-                            ),
+        child: Column(
+          children: <Widget>[
+            if (_selectedFilePaths.isNotEmpty)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: CupertinoColors.separator),
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
+                    child: ListView.builder(
+                      itemCount: _selectedFilePaths.length,
+                      itemBuilder: (context, index) {
+                        final filePath = _selectedFilePaths[index];
+                        return CupertinoListTile(
+                          title: Text(
+                            p.basename(filePath),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          p.basename(_selectedFilePath!),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
-                )
-              else
-                const Spacer(),
-              if (_isConverting)
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: CupertinoActivityIndicator(radius: 20),
                 ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  _status,
-                  textAlign: TextAlign.center,
-                  style: CupertinoTheme.of(context).textTheme.textStyle
-                      .copyWith(color: CupertinoColors.secondaryLabel),
+              )
+            else
+              const Expanded(child: Center(child: Text('변환할 이미지 파일을 선택하세요.'))),
+            if (_isConverting)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CupertinoActivityIndicator(radius: 20),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                _status,
+                textAlign: TextAlign.center,
+                style: CupertinoTheme.of(context).textTheme.textStyle.copyWith(
+                  color: CupertinoColors.secondaryLabel,
                 ),
               ),
-              const SizedBox(height: 24),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: CupertinoButton(
-                        onPressed: _isConverting ? null : _pickImage,
-                        child: const Text('이미지 선택'),
-                      ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: CupertinoButton(
+                      onPressed: _isConverting ? null : _pickImages,
+                      child: const Text('이미지 선택'),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: CupertinoButton.filled(
-                        onPressed: _selectedFilePath != null && !_isConverting
-                            ? _convertImage
-                            : null,
-                        child: const Text('WebP로 변환'),
-                      ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: CupertinoButton.filled(
+                      onPressed: _selectedFilePaths.isNotEmpty && !_isConverting
+                          ? _convertImages
+                          : null,
+                      child: const Text('WebP로 변환'),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 48),
-            ],
-          ),
+            ),
+            const SizedBox(height: 48),
+          ],
         ),
       ),
     );
