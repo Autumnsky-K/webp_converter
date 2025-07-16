@@ -1,9 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:webp_converter/webp_converter.dart';
 import 'package:path/path.dart' as p;
+import 'package:webp_converter/license_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -18,7 +21,7 @@ class MyApp extends StatelessWidget {
       title: 'WebP Converter',
       theme: CupertinoThemeData(
         brightness: Brightness.light,
-        primaryColor: CupertinoColors.systemPurple,
+        primaryColor: CupertinoColors.activeBlue,
       ),
       home: HomePage(title: 'WebP Converter'),
     );
@@ -38,6 +41,21 @@ class _HomePageState extends State<HomePage> {
   String _status = '이미지를 선택해주세요';
   bool _isConverting = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _addCwebpLicense();
+  }
+
+  void _addCwebpLicense() {
+    LicenseRegistry.addLicense(() async* {
+      final licenseText = await rootBundle.loadString('assets/CWEBP_LICENSE');
+      yield LicenseEntryWithLineBreaks([
+        'cwebp (Bundled Executable)',
+      ], licenseText);
+    });
+  }
+
   void _pickImages() async {
     try {
       final FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -47,7 +65,7 @@ class _HomePageState extends State<HomePage> {
       if (result != null && result.paths.isNotEmpty) {
         setState(() {
           _selectedFilePaths = result.paths.map((path) => path!).toList();
-          _status = '${_selectedFilePaths.length} 개의 이미지가 선택되었습니다.';
+          _status = '${_selectedFilePaths.length}개의 이미지가 선택되었습니다.';
         });
       }
     } catch (e) {
@@ -66,7 +84,7 @@ class _HomePageState extends State<HomePage> {
     }
 
     final String? outputDirectory = await FilePicker.platform.getDirectoryPath(
-      dialogTitle: '변환된 파일을 저장할 폴더를 선택하세요.',
+      dialogTitle: '변환된 파일을 저장할 폴더를 선택하세요',
     );
 
     if (outputDirectory == null) {
@@ -75,6 +93,10 @@ class _HomePageState extends State<HomePage> {
       });
       return;
     }
+
+    setState(() {
+      _isConverting = true;
+    });
 
     int successCount = 0;
     int totalCount = _selectedFilePaths.length;
@@ -88,7 +110,6 @@ class _HomePageState extends State<HomePage> {
       String? tempWebPPath;
       try {
         tempWebPPath = await WebpConverter.convertToWebP(inputPath);
-
         if (tempWebPPath != null) {
           final File tempFile = File(tempWebPPath);
           final String outputFileName =
@@ -113,14 +134,30 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _status = '$totalCount개의 이미지 중 $successCount개 변환 완료';
       _isConverting = false;
-      _selectedFilePaths.clear();
+      _selectedFilePaths = [];
     });
+  }
+
+  void _showLicensePage() {
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (context) => const CustomLicensePage(),
+        fullscreenDialog: true,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      navigationBar: CupertinoNavigationBar(middle: Text(widget.title)),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text(widget.title),
+        trailing: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: _showLicensePage,
+          child: const Icon(CupertinoIcons.info),
+        ),
+      ),
       child: SafeArea(
         child: Column(
           children: <Widget>[
@@ -192,6 +229,23 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Helper for older Flutter versions
+class CupertinoListTile extends StatelessWidget {
+  final Widget title;
+  const CupertinoListTile({super.key, required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: CupertinoColors.separator)),
+      ),
+      child: title,
     );
   }
 }
