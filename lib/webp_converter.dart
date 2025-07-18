@@ -12,7 +12,13 @@ class WebpConverter {
     return File(p.join(executableDir.path, 'cwebp'));
   }
 
-  static Future<String?> convertToWebP(String inputPath) async {
+  static Future<String?> convertToWebP(
+    String inputPath, {
+    double quality = 75,
+    bool lossless = false,
+    int method = 4,
+    List<String> metadata = const ['all'],
+  }) async {
     try {
       final File cwebp = _getCWebpExecutable();
 
@@ -27,11 +33,30 @@ class WebpConverter {
         '${inputFileName}_${DateTime.now().millisecondsSinceEpoch}.webp',
       );
 
-      final ProcessResult result = await Process.run(cwebp.path, [
+      final List<String> args = [];
+
+      if (lossless) {
+        args.add('-lossless');
+      } else {
+        args.add('-q');
+        args.add(quality.round().toString());
+      }
+
+      args.add('-m');
+      args.add(method.toString());
+
+      if (metadata.isNotEmpty) {
+        args.add('-metadata');
+        args.add(metadata.join(','));
+      }
+
+      args.addAll([
         inputPath,
         '-o',
         tempOutputPath,
       ]);
+
+      final ProcessResult result = await Process.run(cwebp.path, args);
 
       if (result.exitCode == 0) {
         return tempOutputPath;

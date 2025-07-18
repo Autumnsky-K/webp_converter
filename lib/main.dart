@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:webp_converter/options.dart';
 import 'package:webp_converter/webp_converter.dart';
 import 'package:path/path.dart' as p;
 import 'package:webp_converter/license_page.dart';
@@ -40,11 +41,22 @@ class _HomePageState extends State<HomePage> {
   List<String> _selectedFilePaths = [];
   String _status = '이미지를 선택해주세요';
   bool _isConverting = false;
+  Options _options = const Options(
+    quality: 75,
+    lossless: false,
+    method: 4,
+    metadata: ['all'],
+  );
 
   @override
   void initState() {
     super.initState();
     _addCwebpLicense();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 
   void _addCwebpLicense() {
@@ -109,7 +121,13 @@ class _HomePageState extends State<HomePage> {
 
       String? tempWebPPath;
       try {
-        tempWebPPath = await WebpConverter.convertToWebP(inputPath);
+        tempWebPPath = await WebpConverter.convertToWebP(
+          inputPath,
+          quality: _options.quality,
+          lossless: _options.lossless,
+          method: _options.method,
+          metadata: _options.metadata,
+        );
         if (tempWebPPath != null) {
           final File tempFile = File(tempWebPPath);
           final String outputFileName =
@@ -147,15 +165,39 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _showOptionsPage() async {
+    final Options? newOptions = await Navigator.of(context).push<Options>(
+      CupertinoPageRoute(
+        builder: (context) => OptionsPage(initialOptions: _options),
+        fullscreenDialog: true,
+      ),
+    );
+    if (newOptions != null) {
+      setState(() {
+        _options = newOptions;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       navigationBar: CupertinoNavigationBar(
         middle: Text(widget.title),
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: _showLicensePage,
-          child: const Icon(CupertinoIcons.info),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: _showOptionsPage,
+              child: const Icon(CupertinoIcons.settings),
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: _showLicensePage,
+              child: const Icon(CupertinoIcons.info),
+            ),
+          ],
         ),
       ),
       child: SafeArea(
